@@ -2,23 +2,27 @@
   "crons": [
     {
       "path": "/api/cron/hourly-refresh",
-      "schedule": "0 * * * *"
+      "schedule": "0 21 * * *"
     },
     {
       "path": "/api/cron/fundamentals-refresh",
-      "schedule": "0 */6 * * *"
+      "schedule": "0 22 * * *"
     },
     {
       "path": "/api/cron/earnings-refresh",
-      "schedule": "0 */4 * * *"
+      "schedule": "0 23 * * *"
     },
     {
       "path": "/api/cron/rebuild-benchmarks",
-      "schedule": "0 2 * * 1"
+      "schedule": "0 2 * * *"
     },
     {
       "path": "/api/cron/recompute-entry-zones",
-      "schedule": "30 * * * *"
+      "schedule": "30 21 * * *"
+    },
+    {
+      "path": "/api/cron/twitter-refresh",
+      "schedule": "0 20 * * *"
     }
   ]
 }
