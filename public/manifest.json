@@ -1,0 +1,13 @@
+{
+  "name": "STKVAULT — Deep Stock Research",
+  "short_name": "STKVAULT",
+  "description": "Real-time stock analysis and research for your inner circle",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0b0f",
+  "theme_color": "#0a0b0f",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

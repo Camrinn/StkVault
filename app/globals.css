@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 6% 5%;
+    --foreground: 225 14% 90%;
+    --card: 235 13% 8%;
+    --card-foreground: 225 14% 90%;
+    --border: 233 14% 14%;
+    --muted: 233 12% 12%;
+    --muted-foreground: 228 10% 42%;
+    --accent: 225 80% 72%;
+    --accent-foreground: 225 80% 95%;
+    --destructive: 0 72% 65%;
+    --primary: 225 80% 72%;
+    --primary-foreground: 0 0% 100%;
+    --radius: 0.625rem;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* ─── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+
+/* ─── Mobile-first utilities ───────────────────────────────── */
+@layer utilities {
+  .score-pill {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider border;
+  }
+
+  .card-interactive {
+    @apply bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl p-4
+           transition-all duration-200 active:scale-[0.98];
+  }
+
+  .card-interactive:hover {
+    border-color: hsl(var(--accent) / 0.3);
+  }
+
+  .bottom-sheet {
+    @apply fixed inset-x-0 bottom-0 bg-[hsl(var(--card))] border-t border-[hsl(var(--border))]
+           rounded-t-2xl p-6 z-50 max-h-[80vh] overflow-y-auto;
+  }
+
+  .section-label {
+    @apply text-[10px] font-bold font-mono tracking-[0.1em] text-[hsl(var(--muted-foreground))] uppercase mb-2;
+  }
+
+  .metric-value {
+    @apply text-lg font-bold font-mono;
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ─── Animations ───────────────────────────────────────────── */
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-slide-up { animation: slide-up 0.3s ease-out; }
+.animate-fade-in { animation: fade-in 0.3s ease-out; }

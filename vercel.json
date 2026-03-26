@@ -1,0 +1,24 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/hourly-refresh",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/fundamentals-refresh",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/earnings-refresh",
+      "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/cron/rebuild-benchmarks",
+      "schedule": "0 2 * * 1"
+    },
+    {
+      "path": "/api/cron/recompute-entry-zones",
+      "schedule": "30 * * * *"
+    }
+  ]
+}
