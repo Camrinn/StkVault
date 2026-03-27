@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getActiveSymbols, getLatestSnapshot, getLatestFinancials } from "@/lib/db/queries";
 import { formatCurrency, formatPercent, getChangeColor, getScoreColor } from "@/lib/utils";
 

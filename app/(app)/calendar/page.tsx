@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getUpcomingEarnings, getActiveAlerts } from "@/lib/db/queries";
 import { formatDate, formatCurrency } from "@/lib/utils";
 

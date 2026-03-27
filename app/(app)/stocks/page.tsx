@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getActiveSymbols, getLatestSnapshot, getLatestEntryZone } from "@/lib/db/queries";
 import { formatCurrency, formatPercent, formatNumber, getChangeColor, getScoreColor, getScoreBg, getZoneColor } from "@/lib/utils";
 import type { StockCardData } from "@/types";
