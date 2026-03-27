@@ -86,13 +86,34 @@ export default async function PicksPage() {
     }
   }
 
+  // Lifetime record across all resolved sessions
+  const resolved = (sessions ?? []).filter((s) => s.is_resolved);
+  const lifetimePicks = resolved.flatMap((s) => s.ai_picks ?? []);
+  const lifetimeRecord = {
+    totalSessions: resolved.length,
+    totalPicks: lifetimePicks.length,
+    wins: lifetimePicks.filter((p: any) => p.is_winner).length,
+    avgReturn:
+      lifetimePicks.length > 0
+        ? lifetimePicks.reduce((a: number, p: any) => a + (p.resolved_pct ?? 0), 0) / lifetimePicks.length
+        : 0,
+    bestPick: lifetimePicks.reduce(
+      (best: any, p: any) => (!best || (p.resolved_pct ?? 0) > (best.resolved_pct ?? 0) ? p : best),
+      null as any
+    ),
+  };
+
   return (
     <div className="px-4 pt-4 pb-8">
       <h1 className="text-lg font-mono font-extrabold tracking-wider mb-1">AI PICKS</h1>
       <p className="text-xs text-[hsl(var(--muted-foreground))] mb-4 font-mono">
         Claude analyzes all tracked stocks and selects 3–4 for a given timeline.
       </p>
-      <PicksBoard sessions={sessions ?? []} currentPrices={priceMap} />
+      <PicksBoard
+        sessions={sessions ?? []}
+        currentPrices={priceMap}
+        lifetimeRecord={lifetimeRecord}
+      />
     </div>
   );
 }

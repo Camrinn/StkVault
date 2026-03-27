@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatPercent, getChangeColor } from "@/lib/utils";
+import { getChangeColor } from "@/lib/utils";
 
 const TIMELINES = [
   { value: "1w", label: "1 Week" },
@@ -10,21 +10,74 @@ const TIMELINES = [
   { value: "1m", label: "1 Month" },
 ] as const;
 
+const CONFIDENCE_STYLE: Record<string, string> = {
+  high:   "bg-bullish/15 text-bullish",
+  medium: "bg-neutral/15 text-neutral",
+  low:    "bg-[hsl(var(--muted-foreground))]/15 text-[hsl(var(--muted-foreground))]",
+};
+
 function daysUntil(dateStr: string) {
-  const diff = new Date(dateStr).getTime() - Date.now();
-  return Math.max(0, Math.ceil(diff / 86400000));
+  return Math.max(0, Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000));
 }
 
 function timelineLabel(t: string) {
   return { "1w": "1 WEEK", "2w": "2 WEEKS", "1m": "1 MONTH" }[t] ?? t.toUpperCase();
 }
 
+function shortDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// ── Lifetime Record Banner ────────────────────────────────────────────────────
+
+function LifetimeRecord({ record }: { record: any }) {
+  if (record.totalPicks === 0) return null;
+  const winRate = Math.round((record.wins / record.totalPicks) * 100);
+  return (
+    <div className="card-interactive grid grid-cols-4 gap-2 text-center mb-5">
+      <div>
+        <div className="text-lg font-mono font-extrabold">{record.totalSessions}</div>
+        <div className="text-[10px] font-mono text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Sessions</div>
+      </div>
+      <div>
+        <div className={`text-lg font-mono font-extrabold`}>
+          {record.wins}W / {record.totalPicks - record.wins}L
+        </div>
+        <div className="text-[10px] font-mono text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Record</div>
+      </div>
+      <div>
+        <div className={`text-lg font-mono font-extrabold ${getChangeColor(record.avgReturn)}`}>
+          {record.avgReturn >= 0 ? "+" : ""}{Number(record.avgReturn).toFixed(2)}%
+        </div>
+        <div className="text-[10px] font-mono text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Avg Return</div>
+      </div>
+      <div>
+        <div className={`text-lg font-mono font-extrabold ${winRate >= 50 ? "text-bullish" : "text-bearish"}`}>
+          {winRate}%
+        </div>
+        <div className="text-[10px] font-mono text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Win Rate</div>
+      </div>
+      {record.bestPick && (
+        <div className="col-span-4 border-t border-[hsl(var(--border))] pt-2 mt-1">
+          <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))]">
+            Best pick: <span className="font-bold text-bullish">{record.bestPick.symbol} +{Number(record.bestPick.resolved_pct).toFixed(2)}%</span>
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main board ────────────────────────────────────────────────────────────────
+
 export function PicksBoard({
   sessions,
   currentPrices,
+  lifetimeRecord,
 }: {
   sessions: any[];
   currentPrices: Record<string, number>;
+  lifetimeRecord: any;
 }) {
   const router = useRouter();
   const [generating, setGenerating] = useState(false);
@@ -44,13 +97,10 @@ export function PicksBoard({
         body: JSON.stringify({ timeline }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Failed to generate picks");
-      } else {
-        router.refresh();
-      }
+      if (!res.ok) setError(data.error ?? "Failed to generate picks");
+      else router.refresh();
     } catch {
-      setError("Network error");
+      setError("Network error — check your connection");
     } finally {
       setGenerating(false);
     }
@@ -58,9 +108,12 @@ export function PicksBoard({
 
   return (
     <div className="space-y-5">
+      {/* Lifetime record */}
+      <LifetimeRecord record={lifetimeRecord} />
+
       {/* Generate panel */}
       <div className="card-interactive space-y-3">
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2">
           <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
             Timeline
           </span>
@@ -96,13 +149,7 @@ export function PicksBoard({
           )}
         </button>
 
-        {error && (
-          <p className="text-xs text-bearish font-mono text-center">{error}</p>
-        )}
-
-        <p className="text-[10px] text-[hsl(var(--muted-foreground))] text-center font-mono">
-          Requires ANTHROPIC_API_KEY in Vercel env vars
-        </p>
+        {error && <p className="text-xs text-bearish font-mono text-center">{error}</p>}
       </div>
 
       {/* Active sessions */}
@@ -110,24 +157,20 @@ export function PicksBoard({
         <section>
           <h2 className="section-label">◆ ACTIVE PICKS</h2>
           <div className="space-y-4">
-            {activeSessions.map((session) => (
-              <ActiveSessionCard
-                key={session.id}
-                session={session}
-                currentPrices={currentPrices}
-              />
+            {activeSessions.map((s) => (
+              <ActiveSession key={s.id} session={s} currentPrices={currentPrices} />
             ))}
           </div>
         </section>
       )}
 
-      {/* Past sessions */}
+      {/* Resolved sessions */}
       {resolvedSessions.length > 0 && (
         <section>
           <h2 className="section-label">◆ PAST PICKS</h2>
           <div className="space-y-3">
-            {resolvedSessions.map((session) => (
-              <ResolvedSessionCard key={session.id} session={session} />
+            {resolvedSessions.map((s) => (
+              <ResolvedSession key={s.id} session={s} />
             ))}
           </div>
         </section>
@@ -135,7 +178,7 @@ export function PicksBoard({
 
       {sessions.length === 0 && (
         <div className="text-center py-16">
-          <p className="text-2xl mb-2">🤖</p>
+          <p className="text-3xl mb-3">🤖</p>
           <p className="text-sm font-mono text-[hsl(var(--muted-foreground))]">
             No picks yet. Generate your first AI pick session above.
           </p>
@@ -145,100 +188,58 @@ export function PicksBoard({
   );
 }
 
-function ActiveSessionCard({
-  session,
-  currentPrices,
-}: {
-  session: any;
-  currentPrices: Record<string, number>;
-}) {
+// ── Active session card ───────────────────────────────────────────────────────
+
+function ActiveSession({ session, currentPrices }: { session: any; currentPrices: Record<string, number> }) {
   const [expanded, setExpanded] = useState(true);
   const picks: any[] = session.ai_picks ?? [];
   const daysLeft = daysUntil(session.resolve_date);
 
-  const picksWithPnl = picks.map((p) => {
+  const enriched = picks.map((p) => {
     const current = currentPrices[p.symbol];
     const pct = current ? ((current - p.price_at_pick) / p.price_at_pick) * 100 : null;
     return { ...p, currentPrice: current, pct };
   });
 
-  const avgPct =
-    picksWithPnl.filter((p) => p.pct !== null).reduce((a, p) => a + p.pct!, 0) /
-    (picksWithPnl.filter((p) => p.pct !== null).length || 1);
-
-  const winners = picksWithPnl.filter((p) => (p.pct ?? 0) > 0).length;
+  const withPnl = enriched.filter((p) => p.pct !== null);
+  const avgPct = withPnl.length ? withPnl.reduce((a, p) => a + p.pct!, 0) / withPnl.length : 0;
+  const winners = withPnl.filter((p) => p.pct! > 0).length;
 
   return (
     <div className="card-interactive">
-      {/* Session header */}
-      <div
-        className="flex items-center justify-between cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
-      >
+      {/* Header */}
+      <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpanded(!expanded)}>
         <div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-mono font-bold tracking-wider text-[hsl(var(--accent))]">
               {timelineLabel(session.timeline)}
             </span>
             <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))]">
-              {new Date(session.pick_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              Started {shortDate(session.pick_date)}
             </span>
           </div>
           <p className="text-[10px] font-mono text-[hsl(var(--muted-foreground))] mt-0.5">
-            {daysLeft === 0 ? "Resolving..." : `${daysLeft}d remaining`} ·{" "}
-            {winners}/{picks.length} up
+            {daysLeft === 0 ? "Resolving on next page load..." : `${daysLeft}d remaining`} · {winners}/{picks.length} profitable
           </p>
         </div>
         <div className="text-right">
-          <div className={`text-base font-mono font-extrabold ${getChangeColor(avgPct)}`}>
+          <div className={`text-xl font-mono font-extrabold ${getChangeColor(avgPct)}`}>
             {avgPct >= 0 ? "+" : ""}{avgPct.toFixed(2)}%
           </div>
-          <p className="text-[10px] text-[hsl(var(--muted-foreground))] font-mono">avg return</p>
+          <p className="text-[10px] text-[hsl(var(--muted-foreground))] font-mono">avg P&L</p>
         </div>
       </div>
 
       {expanded && (
-        <div className="mt-3 space-y-2 border-t border-[hsl(var(--border))] pt-3">
+        <div className="mt-3 pt-3 border-t border-[hsl(var(--border))] space-y-4">
           {session.overall_thesis && (
-            <p className="text-xs text-[hsl(var(--muted-foreground))] italic mb-3 leading-relaxed">
+            <p className="text-xs text-[hsl(var(--muted-foreground))] italic leading-relaxed">
               &ldquo;{session.overall_thesis}&rdquo;
             </p>
           )}
-          {picksWithPnl.map((pick) => (
-            <div key={pick.id} className="flex items-start gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <a
-                    href={`/stocks/${pick.symbol}`}
-                    className="font-mono font-extrabold text-sm hover:text-[hsl(var(--accent))] transition-colors"
-                  >
-                    {pick.symbol}
-                  </a>
-                  <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))]">
-                    entry ${Number(pick.price_at_pick).toFixed(2)}
-                  </span>
-                  {pick.currentPrice && (
-                    <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))]">
-                      → ${Number(pick.currentPrice).toFixed(2)}
-                    </span>
-                  )}
-                </div>
-                {pick.reasoning && (
-                  <p className="text-[11px] text-[hsl(var(--muted-foreground))] leading-snug mt-0.5">
-                    {pick.reasoning}
-                  </p>
-                )}
-              </div>
-              <div className="shrink-0 text-right">
-                {pick.pct !== null ? (
-                  <span className={`font-mono font-bold text-sm ${getChangeColor(pick.pct)}`}>
-                    {pick.pct >= 0 ? "+" : ""}{pick.pct.toFixed(2)}%
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-[hsl(var(--muted-foreground))] font-mono">—</span>
-                )}
-              </div>
-            </div>
+
+          {enriched.map((pick) => (
+            <PickCard key={pick.id} pick={pick} mode="active" />
           ))}
         </div>
       )}
@@ -246,28 +247,25 @@ function ActiveSessionCard({
   );
 }
 
-function ResolvedSessionCard({ session }: { session: any }) {
+// ── Resolved session card ─────────────────────────────────────────────────────
+
+function ResolvedSession({ session }: { session: any }) {
   const [expanded, setExpanded] = useState(false);
   const picks: any[] = session.ai_picks ?? [];
   const wins = session.win_count ?? 0;
   const total = session.total_picks ?? picks.length;
-  const avg = session.avg_return_pct ?? 0;
+  const avg = Number(session.avg_return_pct ?? 0);
 
   return (
     <div className="card-interactive">
-      <div
-        className="flex items-center justify-between cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
-      >
+      <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpanded(!expanded)}>
         <div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-mono font-bold tracking-wider text-[hsl(var(--muted-foreground))]">
               {timelineLabel(session.timeline)}
             </span>
             <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))]">
-              {new Date(session.pick_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-              {" → "}
-              {new Date(session.resolve_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              {shortDate(session.pick_date)} → {shortDate(session.resolve_date)}
             </span>
           </div>
           <div className="flex items-center gap-3 mt-0.5">
@@ -277,65 +275,97 @@ function ResolvedSessionCard({ session }: { session: any }) {
               <span className="text-bearish font-bold">{total - wins}L</span>
             </span>
             <span className={`text-[10px] font-mono font-bold ${getChangeColor(avg)}`}>
-              {avg >= 0 ? "+" : ""}{Number(avg).toFixed(2)}% avg
+              {avg >= 0 ? "+" : ""}{avg.toFixed(2)}% avg
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {Array.from({ length: total }).map((_, i) => (
-            <div
-              key={i}
-              className={`w-2 h-2 rounded-full ${i < wins ? "bg-bullish" : "bg-bearish"}`}
-            />
+            <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < wins ? "bg-bullish" : "bg-bearish"}`} />
           ))}
-          <svg
-            className={`ml-1 text-[hsl(var(--muted-foreground))] transition-transform ${expanded ? "rotate-180" : ""}`}
-            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-          >
+          <svg className={`ml-1 text-[hsl(var(--muted-foreground))] transition-transform ${expanded ? "rotate-180" : ""}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="m6 9 6 6 6-6" />
           </svg>
         </div>
       </div>
 
       {expanded && (
-        <div className="mt-3 space-y-2 border-t border-[hsl(var(--border))] pt-3">
+        <div className="mt-3 pt-3 border-t border-[hsl(var(--border))] space-y-4">
           {session.overall_thesis && (
-            <p className="text-xs text-[hsl(var(--muted-foreground))] italic mb-3 leading-relaxed">
+            <p className="text-xs text-[hsl(var(--muted-foreground))] italic leading-relaxed">
               &ldquo;{session.overall_thesis}&rdquo;
             </p>
           )}
           {picks.map((pick) => (
-            <div key={pick.id} className="flex items-start gap-3">
-              <div
-                className={`mt-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${
-                  pick.is_winner ? "bg-bullish/20 text-bullish" : "bg-bearish/20 text-bearish"
-                }`}
-              >
-                {pick.is_winner ? "✓" : "✗"}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <a
-                    href={`/stocks/${pick.symbol}`}
-                    className="font-mono font-extrabold text-sm hover:text-[hsl(var(--accent))] transition-colors"
-                  >
-                    {pick.symbol}
-                  </a>
-                  <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))]">
-                    ${Number(pick.price_at_pick).toFixed(2)} → ${Number(pick.resolved_price ?? 0).toFixed(2)}
-                  </span>
-                </div>
-                {pick.reasoning && (
-                  <p className="text-[11px] text-[hsl(var(--muted-foreground))] leading-snug mt-0.5">
-                    {pick.reasoning}
-                  </p>
-                )}
-              </div>
-              <span className={`shrink-0 font-mono font-bold text-sm ${getChangeColor(pick.resolved_pct ?? 0)}`}>
-                {(pick.resolved_pct ?? 0) >= 0 ? "+" : ""}{Number(pick.resolved_pct ?? 0).toFixed(2)}%
-              </span>
-            </div>
+            <PickCard key={pick.id} pick={pick} mode="resolved" />
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Single pick card ──────────────────────────────────────────────────────────
+
+function PickCard({ pick, mode }: { pick: any; mode: "active" | "resolved" }) {
+  const bullets: string[] = Array.isArray(pick.bull_points) ? pick.bull_points : [];
+  const confidence: string = pick.confidence ?? "medium";
+  const pct = mode === "active" ? pick.pct : pick.resolved_pct;
+  const isWinner = mode === "active" ? (pick.pct ?? 0) > 0 : pick.is_winner;
+
+  return (
+    <div className="space-y-2">
+      {/* Symbol row */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {mode === "resolved" && (
+            <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${isWinner ? "bg-bullish/20 text-bullish" : "bg-bearish/20 text-bearish"}`}>
+              {isWinner ? "✓" : "✗"}
+            </div>
+          )}
+          <a
+            href={`/stocks/${pick.symbol}`}
+            className="font-mono font-extrabold text-sm hover:text-[hsl(var(--accent))] transition-colors"
+          >
+            {pick.symbol}
+          </a>
+          <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${CONFIDENCE_STYLE[confidence] ?? CONFIDENCE_STYLE.medium}`}>
+            {confidence}
+          </span>
+          <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))]">
+            {mode === "active"
+              ? `entry $${Number(pick.price_at_pick).toFixed(2)}${pick.currentPrice ? ` → $${Number(pick.currentPrice).toFixed(2)}` : ""}`
+              : `$${Number(pick.price_at_pick).toFixed(2)} → $${Number(pick.resolved_price ?? 0).toFixed(2)}`}
+          </span>
+        </div>
+        <div className="shrink-0">
+          {pct !== null && pct !== undefined ? (
+            <span className={`font-mono font-bold text-sm ${getChangeColor(pct)}`}>
+              {pct >= 0 ? "+" : ""}{Number(pct).toFixed(2)}%
+            </span>
+          ) : (
+            <span className="text-[10px] text-[hsl(var(--muted-foreground))] font-mono">—</span>
+          )}
+        </div>
+      </div>
+
+      {/* Bull points */}
+      {bullets.length > 0 && (
+        <ul className="space-y-1 pl-1">
+          {bullets.map((pt, i) => (
+            <li key={i} className="flex items-start gap-1.5 text-[11px] text-[hsl(var(--muted-foreground))] leading-snug">
+              <span className="text-bullish mt-px shrink-0">›</span>
+              {pt}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Key risk */}
+      {pick.key_risk && (
+        <div className="flex items-start gap-1.5 text-[11px] leading-snug">
+          <span className="text-bearish shrink-0 mt-px">⚠</span>
+          <span className="text-[hsl(var(--muted-foreground))]">{pick.key_risk}</span>
         </div>
       )}
     </div>

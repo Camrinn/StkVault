@@ -1,4 +1,4 @@
--- AI pick sessions: each time the AI generates a batch of picks
+-- AI pick sessions: each time Claude generates a batch of picks
 CREATE TABLE IF NOT EXISTS ai_pick_sessions (
   id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   timeline         TEXT        NOT NULL CHECK (timeline IN ('1w', '2w', '1m')),
@@ -13,12 +13,14 @@ CREATE TABLE IF NOT EXISTS ai_pick_sessions (
 
 -- Individual picks within a session
 CREATE TABLE IF NOT EXISTS ai_picks (
-  id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id       UUID        NOT NULL REFERENCES ai_pick_sessions(id) ON DELETE CASCADE,
-  symbol           TEXT        NOT NULL,
+  id               UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id       UUID          NOT NULL REFERENCES ai_pick_sessions(id) ON DELETE CASCADE,
+  symbol           TEXT          NOT NULL,
   price_at_pick    DECIMAL(12,4) NOT NULL,
   score_at_pick    DECIMAL(6,2),
-  reasoning        TEXT,
+  confidence       TEXT,                    -- "high" | "medium" | "low"
+  bull_points      JSONB,                   -- ["reason1", "reason2", "reason3"]
+  key_risk         TEXT,                    -- one risk to watch
   resolved_price   DECIMAL(12,4),
   resolved_pct     DECIMAL(8,4),
   is_winner        BOOLEAN
