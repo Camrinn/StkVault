@@ -131,7 +131,7 @@ function NoteCard({ note, isPinned }: { note: Note; isPinned?: boolean }) {
             {typeInfo.label.toUpperCase()}
           </span>
         </div>
-        <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+        <span suppressHydrationWarning className="text-[10px] text-[hsl(var(--muted-foreground))]">
           {note.user_name} · {timeAgo(note.created_at)}
         </span>
       </div>

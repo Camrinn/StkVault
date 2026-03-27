@@ -49,9 +49,14 @@ export function PriceLevelsSection({
   async function handleDelete(id: string) {
     setDeletingId(id);
     try {
-      await fetch(`/api/stocks/${symbol}/levels?id=${id}`, { method: "DELETE" });
-      setLevels((prev) => prev.filter((l) => l.id !== id));
-      router.refresh();
+      const res = await fetch(`/api/stocks/${symbol}/levels?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setLevels((prev) => prev.filter((l) => l.id !== id));
+        router.refresh();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        console.error("Delete failed:", body.error ?? res.status);
+      }
     } catch (err) {
       console.error("Failed to delete level:", err);
     } finally {
