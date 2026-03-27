@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/db/supabase";
 import { getActiveSymbols } from "@/lib/db/queries";
 import { getQuotes } from "@/lib/market-data/finnhub";
+import { fetchLatestTweets } from "@/lib/twitter/scraper";
 import { cache, CacheKeys } from "@/lib/cache";
 
 const AUTH_TOKEN = "stkvault_ok";
@@ -44,6 +45,17 @@ export async function GET(request: NextRequest) {
     );
 
     await cache.del(CacheKeys.dashboard());
+
+    // Also pull fresh tweets
+    try {
+      const tweets = await fetchLatestTweets(100);
+      if (tweets.length > 0) {
+        await db.from("walter_tweets").upsert(tweets, { onConflict: "id" });
+      }
+    } catch {
+      // don't fail the whole refresh if twitter is down
+    }
+
     return NextResponse.json({ ok: true, updated: quotes.length });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
