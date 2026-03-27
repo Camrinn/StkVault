@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getChangeColor } from "@/lib/utils";
 
@@ -83,6 +83,17 @@ export function PicksBoard({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [timeline, setTimeline] = useState<"1w" | "2w" | "1m">("1w");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // Auto-refresh every hour so P&L stays current without manual reloads
+  useEffect(() => {
+    setLastUpdated(new Date());
+    const id = setInterval(() => {
+      router.refresh();
+      setLastUpdated(new Date());
+    }, 60 * 60 * 1000); // 1 hour
+    return () => clearInterval(id);
+  }, [router]);
 
   const activeSessions = sessions.filter((s) => !s.is_resolved);
   const resolvedSessions = sessions.filter((s) => s.is_resolved);
@@ -110,6 +121,13 @@ export function PicksBoard({
     <div className="space-y-5">
       {/* Lifetime record */}
       <LifetimeRecord record={lifetimeRecord} />
+
+      {/* Auto-refresh status */}
+      {lastUpdated && (
+        <p suppressHydrationWarning className="text-[10px] font-mono text-[hsl(var(--muted-foreground))] text-right -mb-3">
+          Updated {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · auto-refreshes hourly
+        </p>
+      )}
 
       {/* Generate panel */}
       <div className="card-interactive space-y-3">
