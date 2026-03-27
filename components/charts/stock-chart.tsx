@@ -68,7 +68,7 @@ function calcRSI(data: OHLCV[], period = 14) {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const RANGES = ["1w", "1m", "3m", "6m", "1y"] as const;
+const RANGES = ["1d", "5d", "1w", "1m", "3m", "6m", "1y"] as const;
 
 const IND_CONFIG = {
   ma20:  { label: "MA20",  color: "#f59e0b" },
