@@ -1,7 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// AUTH DISABLED — bypass all auth checks for local dev
+const AUTH_COOKIE = "sv_auth";
+const AUTH_TOKEN = "stkvault_ok";
+const PUBLIC_PATHS = ["/login", "/api/auth/login"];
+
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Always allow static assets, public paths, and cron routes
+  if (
+    PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
+    pathname.startsWith("/api/cron")
+  ) {
+    return NextResponse.next({ request });
+  }
+
+  const token = request.cookies.get(AUTH_COOKIE)?.value;
+  if (token !== AUTH_TOKEN) {
+    const loginUrl = new URL("/login", request.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
   return NextResponse.next({ request });
 }
 

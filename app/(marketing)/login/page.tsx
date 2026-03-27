@@ -1,38 +1,37 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/db/supabase";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setError(null);
+    setError(false);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-      },
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pin }),
     });
 
-    if (error) {
-      setError(error.message);
+    if (res.ok) {
+      router.replace("/");
     } else {
-      setSent(true);
+      setError(true);
+      setPin("");
     }
     setLoading(false);
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-xs">
         <div className="text-center mb-10">
           <div className="text-4xl text-[hsl(var(--accent))] font-bold mb-2">◆</div>
           <h1 className="text-2xl font-mono font-extrabold tracking-wider">STKVAULT</h1>
@@ -41,47 +40,37 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {sent ? (
-          <div className="card-interactive text-center py-8">
-            <div className="text-2xl mb-3">📧</div>
-            <p className="text-sm font-medium mb-1">Check your email</p>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">
-              We sent a magic link to <strong>{email}</strong>
-            </p>
-          </div>
-        ) : (
-          <div className="card-interactive">
-            <h2 className="text-sm font-mono font-bold tracking-wider mb-4">SIGN IN</h2>
+        <form onSubmit={handleSubmit} className="card-interactive space-y-4">
+          <p className="text-xs font-mono tracking-wider text-[hsl(var(--muted-foreground))] text-center">
+            ENTER PIN
+          </p>
 
-            {error && (
-              <div className="mb-4 p-3 bg-bearish/10 border border-bearish/30 rounded-lg text-sm text-bearish">
-                {error}
-              </div>
-            )}
+          <input
+            type="password"
+            inputMode="numeric"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            placeholder="••••"
+            className={`w-full text-center text-2xl tracking-[0.5em] font-mono bg-[hsl(var(--muted))]/30 border rounded-lg px-4 py-4 focus:outline-none transition-colors ${
+              error
+                ? "border-red-500/60 focus:border-red-500"
+                : "border-[hsl(var(--border))] focus:border-[hsl(var(--accent))]/60"
+            }`}
+            autoFocus
+          />
 
-            <div className="space-y-3">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@email.com"
-                className="w-full bg-[hsl(var(--muted))]/30 border border-[hsl(var(--border))] rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[hsl(var(--accent))]/40"
-                autoFocus
-              />
-              <button
-                onClick={handleLogin}
-                disabled={loading || !email}
-                className="w-full py-3 bg-[hsl(var(--accent))] text-white text-xs font-mono font-bold tracking-wider rounded-lg disabled:opacity-40 transition-opacity"
-              >
-                {loading ? "SENDING..." : "SEND MAGIC LINK"}
-              </button>
-            </div>
+          {error && (
+            <p className="text-xs text-red-400 text-center font-mono">INCORRECT PIN</p>
+          )}
 
-            <p className="text-[10px] text-[hsl(var(--muted-foreground))] text-center mt-4">
-              No password needed. We&apos;ll email you a login link.
-            </p>
-          </div>
-        )}
+          <button
+            type="submit"
+            disabled={loading || pin.length === 0}
+            className="w-full py-3 bg-[hsl(var(--accent))] text-white text-xs font-mono font-bold tracking-wider rounded-lg disabled:opacity-40 transition-opacity"
+          >
+            {loading ? "..." : "ENTER"}
+          </button>
+        </form>
       </div>
     </div>
   );
