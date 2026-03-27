@@ -25,17 +25,6 @@ const navItems = [
     ),
   },
   {
-    href: "/industry",
-    label: "Industry",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="7" width="6" height="14" rx="1" />
-        <rect x="9" y="3" width="6" height="18" rx="1" />
-        <rect x="16" y="10" width="6" height="11" rx="1" />
-      </svg>
-    ),
-  },
-  {
     href: "/calendar",
     label: "Calendar",
     icon: (

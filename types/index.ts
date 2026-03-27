@@ -162,6 +162,15 @@ export interface Note {
   user_name?: string;
 }
 
+export interface PriceLevel {
+  id: string;
+  symbol: string;
+  price: number;
+  initials: string;
+  direction: "up" | "down";
+  created_at: string;
+}
+
 export interface RefreshJob {
   id: string;
   job_type: string;

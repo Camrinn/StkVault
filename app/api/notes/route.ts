@@ -29,6 +29,12 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const body: CreateNoteRequest = await req.json();
   const supabase = createServiceClient();
 
+  // Ensure mock user exists (satisfies FK constraint on notes.user_id)
+  await supabase.from("users").upsert(
+    { id: user.id, email: user.email, name: user.name, role: user.role },
+    { onConflict: "id" }
+  );
+
   const { data, error } = await supabase
     .from("notes")
     .insert({

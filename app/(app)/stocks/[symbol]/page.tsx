@@ -25,6 +25,9 @@ import {
 import { getScoreLabel, getScoreLabelDisplay } from "@/types";
 import { StockChart } from "@/components/charts/stock-chart";
 import { NotesSection } from "@/components/stocks/notes-section";
+import { PriceLevelsSection } from "@/components/stocks/price-levels-section";
+import { createServiceClient } from "@/lib/db/supabase";
+import type { PriceLevel } from "@/types";
 
 export default async function StockDetailPage({
   params,
@@ -33,7 +36,8 @@ export default async function StockDetailPage({
 }) {
   const { symbol } = await params;
 
-  const [info, snap, financials, earnings, entryZone, peers, alerts, notes] =
+  const db = createServiceClient();
+  const [info, snap, financials, earnings, entryZone, peers, alerts, notes, levelsResult] =
     await Promise.all([
       getSymbolByTicker(symbol.toUpperCase()),
       getLatestSnapshot(symbol.toUpperCase()),
@@ -43,7 +47,10 @@ export default async function StockDetailPage({
       getPeerComparisons(symbol.toUpperCase()),
       getActiveAlerts(symbol.toUpperCase()),
       getNotesForSymbol(symbol.toUpperCase()),
+      db.from("price_levels").select("*").eq("symbol", symbol.toUpperCase()).order("price", { ascending: true }),
     ]);
+
+  const levels: PriceLevel[] = levelsResult.data ?? [];
 
   if (!info || !snap) notFound();
 
@@ -105,8 +112,11 @@ export default async function StockDetailPage({
       {/* ─── Chart ─────────────────────────────────────────────── */}
       <section>
         <h2 className="section-label">◆ CHART</h2>
-        <StockChart symbol={info.symbol} />
+        <StockChart symbol={info.symbol} levels={levels} />
       </section>
+
+      {/* ─── Support / Resistance ──────────────────────────────── */}
+      <PriceLevelsSection symbol={info.symbol} initialLevels={levels} />
 
       {/* ─── Score Breakdown ───────────────────────────────────── */}
       <section>
