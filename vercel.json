@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/twitter-refresh",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/signals-refresh",
+      "schedule": "0 21 * * *"
     }
   ]
 }

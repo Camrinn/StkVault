@@ -1,11 +1,11 @@
 /**
  * Financial Modeling Prep (FMP) API client.
- * Handles: earnings, key metrics, ratios, profiles, financial statements.
+ * Uses /stable/ endpoints (migrated from legacy /api/v3/ and /api/v4/).
  *
  * Docs: https://site.financialmodelingprep.com/developer/docs
  */
 
-const BASE = "https://financialmodelingprep.com/api";
+const BASE = "https://financialmodelingprep.com/stable";
 const API_KEY = process.env.FMP_API_KEY!;
 
 async function fmpFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
@@ -29,7 +29,7 @@ export interface FMPProfile {
   companyName: string;
   sector: string;
   industry: string;
-  mktCap: number;
+  marketCap: number;  // stable API uses marketCap (not mktCap)
   price: number;
   exchange: string;
   description: string;
@@ -50,18 +50,31 @@ export interface FMPKeyMetrics {
   debtToEquity: number;
   dividendYield: number;
   earningsYield: number;
-  evToRevenue: number; // mapped from enterpriseValue / revenue
+  evToRevenue: number;
+  // Margin fields (from /ratios-ttm, exposed here to avoid a duplicate fetch)
+  grossProfitMargin: number;
+  operatingProfitMargin: number;
+  netProfitMargin: number;
 }
 
+// /stable/earnings returns epsActual / revenueActual (not eps / revenue)
 export interface FMPEarnings {
   date: string;
   symbol: string;
-  eps: number | null;
+  epsActual: number | null;
   epsEstimated: number | null;
-  revenue: number | null;
+  revenueActual: number | null;
   revenueEstimated: number | null;
-  fiscalDateEnding: string;
-  updatedFromDate: string;
+  period?: string;           // e.g. "Q1 2025"
+  fiscalDateEnding?: string; // legacy field, may still be present
+}
+
+export interface FMPEarningsCalendar {
+  date: string;
+  symbol: string;
+  epsEstimated: number | null;
+  revenueEstimated: number | null;
+  fiscalDateEnding?: string;
 }
 
 export interface FMPIncomeStatement {
@@ -76,16 +89,6 @@ export interface FMPIncomeStatement {
   netIncomeRatio: number;
   eps: number;
   epsdiluted: number;
-}
-
-export interface FMPEarningsCalendar {
-  date: string;
-  symbol: string;
-  eps: number | null;
-  epsEstimated: number | null;
-  revenue: number | null;
-  revenueEstimated: number | null;
-  fiscalDateEnding: string;
 }
 
 export interface FMPQuote {
@@ -104,29 +107,76 @@ export interface FMPQuote {
   previousClose: number;
 }
 
+// ─── Analyst Types ───────────────────────────────────────────────────────────
+
+export interface FMPGradesConsensus {
+  symbol: string;
+  strongBuy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strongSell: number;
+  consensus: string; // "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell"
+}
+
+export interface FMPPriceTargetSummary {
+  symbol: string;
+  lastMonthAvgPriceTarget: number | null;
+  lastMonthCount: number | null;
+  lastQuarterAvgPriceTarget: number | null;
+  lastQuarterCount: number | null;
+  lastYearAvgPriceTarget: number | null;
+  lastYearCount: number | null;
+}
+
 // ─── Endpoints ──────────────────────────────────────────────────────────────
 
 /**
  * Batch quote for multiple tickers — price, change, volume, 52wk, SMAs.
  */
 export async function getQuotes(symbols: string[]): Promise<FMPQuote[]> {
-  return fmpFetch<FMPQuote[]>(`/v3/quote/${symbols.join(",")}`);
+  return fmpFetch<FMPQuote[]>(`/quote`, { symbol: symbols.join(",") });
 }
 
 /**
  * Company profile with sector, industry, market cap.
  */
 export async function getProfile(symbol: string): Promise<FMPProfile | null> {
-  const data = await fmpFetch<FMPProfile[]>(`/v3/profile/${symbol}`);
+  const data = await fmpFetch<FMPProfile[]>(`/profile`, { symbol });
   return data?.[0] ?? null;
 }
 
 /**
  * Key metrics (TTM).
+ * Merges /key-metrics-ttm and /ratios-ttm to reconstruct the legacy FMPKeyMetrics shape.
  */
 export async function getKeyMetricsTTM(symbol: string): Promise<FMPKeyMetrics | null> {
-  const data = await fmpFetch<FMPKeyMetrics[]>(`/v3/key-metrics-ttm/${symbol}`);
-  return data?.[0] ?? null;
+  const [kmData, ratioData] = await Promise.all([
+    fmpFetch<any[]>(`/key-metrics-ttm`, { symbol }).catch(() => []),
+    fmpFetch<any[]>(`/ratios-ttm`, { symbol }).catch(() => []),
+  ]);
+  const km = kmData?.[0];
+  const r = ratioData?.[0];
+  if (!km && !r) return null;
+
+  return {
+    date: km?.date ?? "",
+    symbol: km?.symbol ?? symbol,
+    revenuePerShare: r?.revenuePerShareTTM ?? 0,
+    netIncomePerShare: r?.netIncomePerShareTTM ?? 0,
+    operatingCashFlowPerShare: r?.operatingCashFlowPerShareTTM ?? 0,
+    freeCashFlowPerShare: r?.freeCashFlowPerShareTTM ?? 0,
+    peRatio: r?.priceToEarningsRatioTTM ?? 0,
+    priceToSalesRatio: r?.priceToSalesRatioTTM ?? 0,
+    enterpriseValueOverEBITDA: km?.evToEBITDATTM ?? 0,
+    debtToEquity: r?.debtToEquityRatioTTM ?? 0,
+    dividendYield: r?.dividendYieldTTM ?? 0,
+    earningsYield: 0,
+    evToRevenue: km?.evToSalesTTM ?? 0,
+    grossProfitMargin: r?.grossProfitMarginTTM ?? 0,
+    operatingProfitMargin: r?.operatingProfitMarginTTM ?? 0,
+    netProfitMargin: r?.netProfitMarginTTM ?? 0,
+  };
 }
 
 /**
@@ -137,7 +187,8 @@ export async function getKeyMetrics(
   period: "annual" | "quarter" = "quarter",
   limit: number = 8
 ): Promise<FMPKeyMetrics[]> {
-  return fmpFetch<FMPKeyMetrics[]>(`/v3/key-metrics/${symbol}`, {
+  return fmpFetch<FMPKeyMetrics[]>(`/key-metrics`, {
+    symbol,
     period,
     limit: String(limit),
   });
@@ -145,12 +196,14 @@ export async function getKeyMetrics(
 
 /**
  * Historical earnings (actuals + estimates).
+ * Note: stable endpoint returns epsActual / revenueActual instead of eps / revenue.
  */
 export async function getEarningsHistory(
   symbol: string,
   limit: number = 12
 ): Promise<FMPEarnings[]> {
-  return fmpFetch<FMPEarnings[]>(`/v3/historical/earning_calendar/${symbol}`, {
+  return fmpFetch<FMPEarnings[]>(`/earnings`, {
+    symbol,
     limit: String(limit),
   });
 }
@@ -162,7 +215,7 @@ export async function getEarningsCalendar(
   from: string,
   to: string
 ): Promise<FMPEarningsCalendar[]> {
-  return fmpFetch<FMPEarningsCalendar[]>(`/v3/earning_calendar`, { from, to });
+  return fmpFetch<FMPEarningsCalendar[]>(`/earnings-calendar`, { from, to });
 }
 
 /**
@@ -173,17 +226,18 @@ export async function getIncomeStatements(
   period: "annual" | "quarter" = "quarter",
   limit: number = 8
 ): Promise<FMPIncomeStatement[]> {
-  return fmpFetch<FMPIncomeStatement[]>(`/v3/income-statement/${symbol}`, {
+  return fmpFetch<FMPIncomeStatement[]>(`/income-statement`, {
+    symbol,
     period,
     limit: String(limit),
   });
 }
 
 /**
- * Get financial ratios.
+ * Get financial ratios (TTM).
  */
 export async function getRatiosTTM(symbol: string) {
-  const data = await fmpFetch<any[]>(`/v3/ratios-ttm/${symbol}`);
+  const data = await fmpFetch<any[]>(`/ratios-ttm`, { symbol });
   return data?.[0] ?? null;
 }
 
@@ -195,10 +249,40 @@ export async function getFinancialGrowth(
   period: "annual" | "quarter" = "quarter",
   limit: number = 4
 ) {
-  return fmpFetch<any[]>(`/v3/financial-growth/${symbol}`, {
+  return fmpFetch<any[]>(`/financial-growth`, {
+    symbol,
     period,
     limit: String(limit),
   });
+}
+
+/**
+ * Analyst grades consensus (buy / hold / sell distribution).
+ * Replaces per-event upgrades/downgrades which require a higher plan tier.
+ */
+export async function getGradesConsensus(
+  symbol: string
+): Promise<FMPGradesConsensus | null> {
+  try {
+    const data = await fmpFetch<FMPGradesConsensus[]>(`/grades-consensus`, { symbol });
+    return data?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Price target summary (average targets over last month, quarter, year).
+ */
+export async function getPriceTargetSummary(
+  symbol: string
+): Promise<FMPPriceTargetSummary | null> {
+  try {
+    const data = await fmpFetch<FMPPriceTargetSummary[]>(`/price-target-summary`, { symbol });
+    return data?.[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -218,5 +302,5 @@ export async function screenStocks(params: {
   if (params.marketCapLessThan) queryParams.marketCapLessThan = String(params.marketCapLessThan);
   queryParams.limit = String(params.limit ?? 20);
 
-  return fmpFetch<any[]>(`/v3/stock-screener`, queryParams);
+  return fmpFetch<any[]>(`/stock-screener`, queryParams);
 }

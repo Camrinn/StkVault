@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
         let priceReaction5d: number | null = null;
         let priceReaction20d: number | null = null;
 
-        if (e.eps !== null) {
+        if (e.epsActual !== null) {
           try {
             const reportDate = new Date(e.date);
             const after1d = new Date(reportDate.getTime() + 2 * 86400000);
@@ -64,16 +64,16 @@ export async function GET(request: NextRequest) {
           {
             symbol: sym.symbol,
             report_date: e.date,
-            fiscal_period: e.fiscalDateEnding ?? "",
+            fiscal_period: e.period ?? e.fiscalDateEnding ?? "",
             estimated_eps: e.epsEstimated,
-            actual_eps: e.eps,
+            actual_eps: e.epsActual,
             estimated_revenue: e.revenueEstimated,
-            actual_revenue: e.revenue,
-            eps_surprise: e.eps != null && e.epsEstimated != null
-              ? ((e.eps - e.epsEstimated) / Math.abs(e.epsEstimated || 1)) * 100
+            actual_revenue: e.revenueActual,
+            eps_surprise: e.epsActual != null && e.epsEstimated != null
+              ? ((e.epsActual - e.epsEstimated) / Math.abs(e.epsEstimated || 1)) * 100
               : null,
-            revenue_surprise: e.revenue != null && e.revenueEstimated != null
-              ? ((e.revenue - e.revenueEstimated) / Math.abs(e.revenueEstimated || 1)) * 100
+            revenue_surprise: e.revenueActual != null && e.revenueEstimated != null
+              ? ((e.revenueActual - e.revenueEstimated) / Math.abs(e.revenueEstimated || 1)) * 100
               : null,
             price_reaction_1d: priceReaction1d,
             price_reaction_5d: priceReaction5d,
