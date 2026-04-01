@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const AUTH_COOKIE = "sv_auth";
 const AUTH_TOKEN = "stkvault_ok";
-const PUBLIC_PATHS = ["/login", "/api/auth/login"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/predictions"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/signals-refresh",
       "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/cron/resolve-predictions",
+      "schedule": "30 22 * * *"
     }
   ]
 }
