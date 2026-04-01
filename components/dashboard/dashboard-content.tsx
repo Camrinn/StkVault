@@ -1,11 +1,43 @@
 import { getDashboardData } from "@/lib/db/queries";
+import { createServiceClient } from "@/lib/db/supabase";
 import { StockMiniCard } from "@/components/stocks/stock-mini-card";
 import { AlertCard } from "@/components/dashboard/alert-card";
 import { EarningsRow } from "@/components/dashboard/earnings-row";
 import { formatPercent, timeAgo } from "@/lib/utils";
 
+const MEDALS = ["🥇", "🥈", "🥉"];
+
+async function getLeaderboard() {
+  const db = createServiceClient();
+  const { data: all } = await db
+    .from("predictions")
+    .select("player_name, was_correct, return_pct, created_at");
+
+  const playerStats: Record<string, { resolved: number; correct: number; returnSum: number }> = {};
+  for (const p of all ?? []) {
+    if (!playerStats[p.player_name]) playerStats[p.player_name] = { resolved: 0, correct: 0, returnSum: 0 };
+    const s = playerStats[p.player_name];
+    if (p.was_correct !== null) {
+      s.resolved++;
+      if (p.was_correct) { s.correct++; s.returnSum += p.return_pct ?? 0; }
+    }
+  }
+
+  return Object.entries(playerStats)
+    .filter(([, s]) => s.resolved >= 3)
+    .map(([name, s]) => ({
+      player_name: name,
+      resolved: s.resolved,
+      correct: s.correct,
+      win_rate: s.correct / s.resolved,
+      avg_return: s.correct > 0 ? s.returnSum / s.correct : 0,
+    }))
+    .sort((a, b) => b.win_rate - a.win_rate || b.avg_return - a.avg_return)
+    .slice(0, 5);
+}
+
 export async function DashboardContent() {
-  const data = await getDashboardData();
+  const [data, leaderboard] = await Promise.all([getDashboardData(), getLeaderboard()]);
 
   return (
     <div className="space-y-6 pb-4">
@@ -80,6 +112,59 @@ export async function DashboardContent() {
           </div>
         </section>
       )}
+
+      {/* ─── Leaderboard ─────────────────────────────────────── */}
+      <section>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="section-label">◆ LEADERBOARD</h2>
+          <a href="/predictions" className="text-[10px] font-mono text-[hsl(var(--accent))] hover:underline">
+            See all →
+          </a>
+        </div>
+        {leaderboard.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-5 text-center">
+            <p className="text-[11px] font-mono text-[hsl(var(--muted-foreground))]">
+              No ranked players yet — make 3+ calls to get on the board
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {leaderboard.map((entry, i) => {
+              const winPct = (entry.win_rate * 100).toFixed(0);
+              const medal = i < 3 ? MEDALS[i] : `#${i + 1}`;
+              return (
+                <div key={entry.player_name} className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <span className="text-lg w-7 shrink-0 text-center">{medal}</span>
+                      <div className="min-w-0">
+                        <p className="font-mono font-bold text-sm truncate">{entry.player_name}</p>
+                        <p className="text-[10px] font-mono text-[hsl(var(--muted-foreground))]">
+                          {entry.correct}/{entry.resolved} correct
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`font-mono font-bold text-sm ${Number(winPct) >= 60 ? "text-emerald-400" : Number(winPct) >= 45 ? "text-amber-400" : "text-red-400"}`}>
+                        {winPct}% W
+                      </p>
+                      <p className={`text-[10px] font-mono ${entry.avg_return >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {entry.avg_return >= 0 ? "+" : ""}{entry.avg_return.toFixed(1)}% avg
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-2 h-1 rounded-full bg-[hsl(var(--border))] overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${Number(winPct) >= 60 ? "bg-emerald-500" : Number(winPct) >= 45 ? "bg-amber-500" : "bg-red-500"}`}
+                      style={{ width: `${winPct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       {/* ─── Strongest Trends ────────────────────────────── */}
       <section>

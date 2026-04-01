@@ -14,15 +14,37 @@ import {
 export default async function SignalsPage() {
   const db = createServiceClient();
 
-  // ── Insider Buying ─────────────────────────────────────────────────────────
-  const { data: insiderRaw } = await db
-    .from("insider_transactions")
-    .select("*, tracked_symbols(company_name)")
-    .eq("transaction_type", "P")
-    .gte("transaction_date", new Date(Date.now() - 60 * 86_400_000).toISOString().split("T")[0])
-    .order("total_value", { ascending: false })
-    .limit(50);
+  // ── All top-level queries in parallel ─────────────────────────────────────
+  const [
+    { data: insiderRaw },
+    { data: trackedRaw },
+    { data: shortRaw },
+    { data: patternsRaw },
+    { data: ezRaw },
+  ] = await Promise.all([
+    db
+      .from("insider_transactions")
+      .select("*, tracked_symbols(company_name)")
+      .eq("transaction_type", "P")
+      .gte("transaction_date", new Date(Date.now() - 60 * 86_400_000).toISOString().split("T")[0])
+      .order("total_value", { ascending: false })
+      .limit(50),
+    db.from("tracked_symbols").select("symbol, company_name").eq("is_active", true),
+    db.from("latest_short_interest").select("symbol, short_float_pct, short_ratio"),
+    db
+      .from("chart_patterns")
+      .select("*, tracked_symbols(company_name)")
+      .eq("is_active", true)
+      .order("confidence", { ascending: false })
+      .limit(30),
+    db
+      .from("latest_entry_zones")
+      .select("*")
+      .in("current_zone", ["pullback", "support_test"])
+      .order("current_zone"),
+  ]);
 
+  // ── Insider Buying ─────────────────────────────────────────────────────────
   const insiderBuys: InsiderRow[] = (insiderRaw ?? []).map((r: any) => ({
     id: r.id,
     symbol: r.symbol,
@@ -37,11 +59,6 @@ export default async function SignalsPage() {
   }));
 
   // ── Analyst Consensus (live from FMP) ─────────────────────────────────────
-  const { data: trackedRaw } = await db
-    .from("tracked_symbols")
-    .select("symbol, company_name")
-    .eq("is_active", true);
-
   const analystActions: AnalystRow[] = (
     await Promise.all(
       (trackedRaw ?? []).map(async (sym: any) => {
@@ -72,52 +89,55 @@ export default async function SignalsPage() {
   ).filter(Boolean) as AnalystRow[];
 
   // ── Short Squeeze Watch ────────────────────────────────────────────────────
-  const { data: shortRaw } = await db
-    .from("latest_short_interest")
-    .select("symbol, short_float_pct, short_ratio");
+  const squeezeFiltered = (shortRaw ?? []).filter((si: any) => si.short_float_pct >= 10);
+  const squeezeSymbols = squeezeFiltered.map((si: any) => si.symbol);
 
   const squeezeWatch: ShortSqueezeRow[] = [];
-  for (const si of (shortRaw ?? []) as any[]) {
-    if (si.short_float_pct < 10) continue;
 
-    const [snapRes, ezRes, infoRes] = await Promise.all([
+  if (squeezeSymbols.length > 0) {
+    const [{ data: snapsBatch }, { data: ezBatch }, { data: companyBatch }] = await Promise.all([
       db
         .from("symbol_snapshots")
-        .select("total_score, rs_vs_spy")
-        .eq("symbol", si.symbol)
-        .order("snapshot_time", { ascending: false })
-        .limit(1)
-        .single(),
+        .select("symbol, total_score, rs_vs_spy, snapshot_time")
+        .in("symbol", squeezeSymbols)
+        .order("snapshot_time", { ascending: false }),
       db
         .from("entry_zones")
-        .select("current_zone")
-        .eq("symbol", si.symbol)
-        .order("as_of_time", { ascending: false })
-        .limit(1)
-        .single(),
-      db.from("tracked_symbols").select("company_name").eq("symbol", si.symbol).single(),
+        .select("symbol, current_zone, as_of_time")
+        .in("symbol", squeezeSymbols)
+        .order("as_of_time", { ascending: false }),
+      db.from("tracked_symbols").select("symbol, company_name").in("symbol", squeezeSymbols),
     ]);
 
-    squeezeWatch.push({
-      symbol: si.symbol,
-      company_name: infoRes.data?.company_name ?? si.symbol,
-      short_float_pct: si.short_float_pct,
-      short_ratio: si.short_ratio,
-      total_score: snapRes.data?.total_score ?? 0,
-      rs_vs_spy: snapRes.data?.rs_vs_spy ?? null,
-      current_zone: ezRes.data?.current_zone ?? "fair",
-    });
+    // Build lookup maps (keep only most-recent row per symbol)
+    const snapMap: Record<string, any> = {};
+    for (const s of snapsBatch ?? []) {
+      if (!snapMap[s.symbol]) snapMap[s.symbol] = s;
+    }
+    const ezMap: Record<string, any> = {};
+    for (const e of ezBatch ?? []) {
+      if (!ezMap[e.symbol]) ezMap[e.symbol] = e;
+    }
+    const companyMap: Record<string, string> = {};
+    for (const c of companyBatch ?? []) {
+      companyMap[c.symbol] = c.company_name;
+    }
+
+    for (const si of squeezeFiltered as any[]) {
+      squeezeWatch.push({
+        symbol: si.symbol,
+        company_name: companyMap[si.symbol] ?? si.symbol,
+        short_float_pct: si.short_float_pct,
+        short_ratio: si.short_ratio,
+        total_score: snapMap[si.symbol]?.total_score ?? 0,
+        rs_vs_spy: snapMap[si.symbol]?.rs_vs_spy ?? null,
+        current_zone: ezMap[si.symbol]?.current_zone ?? "fair",
+      });
+    }
+    squeezeWatch.sort((a, b) => b.short_float_pct - a.short_float_pct);
   }
-  squeezeWatch.sort((a, b) => b.short_float_pct - a.short_float_pct);
 
   // ── Chart Patterns ─────────────────────────────────────────────────────────
-  const { data: patternsRaw } = await db
-    .from("chart_patterns")
-    .select("*, tracked_symbols(company_name)")
-    .eq("is_active", true)
-    .order("confidence", { ascending: false })
-    .limit(30);
-
   const patterns: PatternRow[] = (patternsRaw ?? []).map((r: any) => ({
     id: r.id,
     symbol: r.symbol,
@@ -130,45 +150,51 @@ export default async function SignalsPage() {
   }));
 
   // ── Entry Signals ──────────────────────────────────────────────────────────
-  const { data: ezRaw } = await db
-    .from("latest_entry_zones")
-    .select("*")
-    .in("current_zone", ["pullback", "support_test"])
-    .order("current_zone");
-
   const entrySignals: EntrySignalRow[] = [];
-  for (const ez of (ezRaw ?? []) as any[]) {
-    const [snapRes, infoRes] = await Promise.all([
+
+  const ezSymbols = (ezRaw ?? []).map((ez: any) => ez.symbol);
+
+  if (ezSymbols.length > 0) {
+    const [{ data: entrySnapsBatch }, { data: entryCompanyBatch }] = await Promise.all([
       db
         .from("symbol_snapshots")
-        .select("total_score, price, rs_vs_spy")
-        .eq("symbol", ez.symbol)
-        .order("snapshot_time", { ascending: false })
-        .limit(1)
-        .single(),
-      db.from("tracked_symbols").select("company_name").eq("symbol", ez.symbol).single(),
+        .select("symbol, total_score, price, rs_vs_spy, snapshot_time")
+        .in("symbol", ezSymbols)
+        .order("snapshot_time", { ascending: false }),
+      db.from("tracked_symbols").select("symbol, company_name").in("symbol", ezSymbols),
     ]);
 
-    entrySignals.push({
-      symbol: ez.symbol,
-      company_name: infoRes.data?.company_name ?? ez.symbol,
-      current_zone: ez.current_zone,
-      risk_label: ez.risk_label,
-      total_score: snapRes.data?.total_score ?? 0,
-      price: snapRes.data?.price ?? 0,
-      rs_vs_spy: snapRes.data?.rs_vs_spy ?? null,
-      aggressive_entry_low: ez.aggressive_entry_low,
-      aggressive_entry_high: ez.aggressive_entry_high,
-      patient_entry_low: ez.patient_entry_low,
-      patient_entry_high: ez.patient_entry_high,
-      summary: ez.summary,
+    const entrySnapMap: Record<string, any> = {};
+    for (const s of entrySnapsBatch ?? []) {
+      if (!entrySnapMap[s.symbol]) entrySnapMap[s.symbol] = s;
+    }
+    const entryCompanyMap: Record<string, string> = {};
+    for (const c of entryCompanyBatch ?? []) {
+      entryCompanyMap[c.symbol] = c.company_name;
+    }
+
+    for (const ez of (ezRaw ?? []) as any[]) {
+      entrySignals.push({
+        symbol: ez.symbol,
+        company_name: entryCompanyMap[ez.symbol] ?? ez.symbol,
+        current_zone: ez.current_zone,
+        risk_label: ez.risk_label,
+        total_score: entrySnapMap[ez.symbol]?.total_score ?? 0,
+        price: entrySnapMap[ez.symbol]?.price ?? 0,
+        rs_vs_spy: entrySnapMap[ez.symbol]?.rs_vs_spy ?? null,
+        aggressive_entry_low: ez.aggressive_entry_low,
+        aggressive_entry_high: ez.aggressive_entry_high,
+        patient_entry_low: ez.patient_entry_low,
+        patient_entry_high: ez.patient_entry_high,
+        summary: ez.summary,
+      });
+    }
+
+    entrySignals.sort((a, b) => {
+      if (a.current_zone !== b.current_zone) return a.current_zone === "support_test" ? -1 : 1;
+      return b.total_score - a.total_score;
     });
   }
-
-  entrySignals.sort((a, b) => {
-    if (a.current_zone !== b.current_zone) return a.current_zone === "support_test" ? -1 : 1;
-    return b.total_score - a.total_score;
-  });
 
   return (
     <div className="px-4 pt-4 pb-8">

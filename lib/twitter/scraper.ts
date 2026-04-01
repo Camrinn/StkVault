@@ -95,10 +95,24 @@ function parseNitterRSS(xml: string): WalterTweet[] {
   return tweets;
 }
 
+const NITTER_INSTANCES = [
+  "nitter.poast.org",
+  "nitter.privacydev.net",
+  "nitter.1d4.us",
+  "nitter.net",
+];
+
 async function fetchFromNitter(count: number): Promise<WalterTweet[]> {
-  const xml = await httpsGet("https://nitter.net/DeItaone/rss");
-  const tweets = parseNitterRSS(xml);
-  return tweets.slice(0, count);
+  for (const instance of NITTER_INSTANCES) {
+    try {
+      const xml = await httpsGet(`https://${instance}/DeItaone/rss`);
+      const tweets = parseNitterRSS(xml);
+      if (tweets.length > 0) return tweets.slice(0, count);
+    } catch {
+      // try next instance
+    }
+  }
+  throw new Error("All Nitter instances failed");
 }
 
 async function fetchFromSyndication(count: number): Promise<WalterTweet[]> {

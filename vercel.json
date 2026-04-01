@@ -18,7 +18,7 @@
     },
     {
       "path": "/api/cron/twitter-refresh",
-      "schedule": "0 20 * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/signals-refresh",

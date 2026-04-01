@@ -8,14 +8,18 @@
 const BASE = "https://financialmodelingprep.com/stable";
 const API_KEY = process.env.FMP_API_KEY!;
 
-async function fmpFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
+async function fmpFetch<T>(
+  path: string,
+  params?: Record<string, string>,
+  revalidate: number = 0
+): Promise<T> {
   const url = new URL(`${BASE}${path}`);
   url.searchParams.set("apikey", API_KEY);
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   }
 
-  const res = await fetch(url.toString(), { next: { revalidate: 0 } });
+  const res = await fetch(url.toString(), { next: { revalidate } });
   if (!res.ok) {
     throw new Error(`FMP API error ${res.status}: ${await res.text()}`);
   }
@@ -264,7 +268,8 @@ export async function getGradesConsensus(
   symbol: string
 ): Promise<FMPGradesConsensus | null> {
   try {
-    const data = await fmpFetch<FMPGradesConsensus[]>(`/grades-consensus`, { symbol });
+    // Analyst ratings change slowly — cache 4 hours via Next.js fetch cache
+    const data = await fmpFetch<FMPGradesConsensus[]>(`/grades-consensus`, { symbol }, 14_400);
     return data?.[0] ?? null;
   } catch {
     return null;
@@ -278,7 +283,8 @@ export async function getPriceTargetSummary(
   symbol: string
 ): Promise<FMPPriceTargetSummary | null> {
   try {
-    const data = await fmpFetch<FMPPriceTargetSummary[]>(`/price-target-summary`, { symbol });
+    // Price targets change slowly — cache 4 hours via Next.js fetch cache
+    const data = await fmpFetch<FMPPriceTargetSummary[]>(`/price-target-summary`, { symbol }, 14_400);
     return data?.[0] ?? null;
   } catch {
     return null;

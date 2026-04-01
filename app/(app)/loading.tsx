@@ -1,4 +1,4 @@
-export function DashboardSkeleton() {
+export default function Loading() {
   const candles = [
     { green: true,  bodyH: 44, wickT: 14, wickB: 8,  delay: "0s" },
     { green: false, bodyH: 28, wickT: 8,  wickB: 12, delay: "0.18s" },
@@ -96,7 +96,16 @@ export function DashboardSkeleton() {
             className="flex whitespace-nowrap"
             style={{ animation: "ticker-scroll 22s linear infinite" }}
           >
-            {[0, 1, 2, 3].map((n) => (
+            {/* Duplicate so the loop is seamless */}
+            {[0, 1].map((n) => (
+              <span
+                key={n}
+                className="text-[10px] font-mono tracking-widest text-[hsl(var(--muted-foreground))]/60 pr-16"
+              >
+                ◆ &nbsp; {tape}
+              </span>
+            ))}
+            {[2, 3].map((n) => (
               <span
                 key={n}
                 className="text-[10px] font-mono tracking-widest text-[hsl(var(--muted-foreground))]/60 pr-16"
